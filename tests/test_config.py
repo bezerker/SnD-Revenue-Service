@@ -78,6 +78,23 @@ def test_load_settings_rejects_malformed_ids(
         load_settings()
 
 
+def test_load_settings_rejects_malformed_toml(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[discord\n"
+        "guild_id = 123\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SND_REVENUE_CONFIG", str(config_path))
+    monkeypatch.setenv("DISCORD_TOKEN", "token-value")
+
+    with pytest.raises(ConfigError, match="Invalid TOML"):
+        load_settings()
+
+
 def test_load_settings_requires_all_required_keys(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

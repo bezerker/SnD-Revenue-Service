@@ -29,8 +29,11 @@ def load_settings() -> Settings:
     if not config_path.is_file():
         raise ConfigError(f"Config file does not exist: {config_path}")
 
-    with config_path.open("rb") as handle:
-        data = tomllib.load(handle)
+    try:
+        with config_path.open("rb") as handle:
+            data = tomllib.load(handle)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"Invalid TOML in config file: {config_path}") from exc
 
     discord_section = data.get("discord") or {}
     token = os.environ.get("DISCORD_TOKEN")
