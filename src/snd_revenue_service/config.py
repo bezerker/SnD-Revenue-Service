@@ -23,6 +23,8 @@ class Settings:
 def _parse_intlike_value(value: object) -> int:
     if isinstance(value, bool):
         raise TypeError("boolean values are not valid IDs")
+    if isinstance(value, float):
+        raise TypeError("float values are not valid IDs")
 
     return int(value)
 

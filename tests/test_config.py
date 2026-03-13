@@ -133,6 +133,24 @@ def test_load_settings_rejects_boolean_ids(
         load_settings()
 
 
+def test_load_settings_rejects_float_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[discord]\n"
+        "guild_id = 123.9\n"
+        "audit_channel_id = 456\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SND_REVENUE_CONFIG", str(config_path))
+    monkeypatch.setenv("DISCORD_TOKEN", "token-value")
+
+    with pytest.raises(ConfigError, match="integer-like"):
+        load_settings()
+
+
 def test_load_settings_requires_all_required_keys(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
