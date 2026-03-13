@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from unittest import mock
 
 import pytest
 
@@ -92,6 +93,43 @@ def test_load_settings_rejects_malformed_toml(
     monkeypatch.setenv("DISCORD_TOKEN", "token-value")
 
     with pytest.raises(ConfigError, match="Invalid TOML"):
+        load_settings()
+
+
+def test_load_settings_normalizes_config_read_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[discord]\n"
+        "guild_id = 123\n"
+        "audit_channel_id = 456\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SND_REVENUE_CONFIG", str(config_path))
+    monkeypatch.setenv("DISCORD_TOKEN", "token-value")
+
+    with mock.patch.object(Path, "open", side_effect=OSError("permission denied")):
+        with pytest.raises(ConfigError, match="Could not read config file"):
+            load_settings()
+
+
+def test_load_settings_rejects_boolean_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[discord]\n"
+        "guild_id = true\n"
+        "audit_channel_id = 456\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SND_REVENUE_CONFIG", str(config_path))
+    monkeypatch.setenv("DISCORD_TOKEN", "token-value")
+
+    with pytest.raises(ConfigError, match="integer-like"):
         load_settings()
 
 

@@ -20,6 +20,13 @@ class Settings:
     config_path: Path
 
 
+def _parse_intlike_value(value: object) -> int:
+    if isinstance(value, bool):
+        raise TypeError("boolean values are not valid IDs")
+
+    return int(value)
+
+
 def load_settings() -> Settings:
     raw_path = os.environ.get("SND_REVENUE_CONFIG")
     if not raw_path:
@@ -34,6 +41,8 @@ def load_settings() -> Settings:
             data = tomllib.load(handle)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"Invalid TOML in config file: {config_path}") from exc
+    except OSError as exc:
+        raise ConfigError(f"Could not read config file: {config_path}") from exc
 
     discord_section = data.get("discord") or {}
     token = os.environ.get("DISCORD_TOKEN")
@@ -41,8 +50,8 @@ def load_settings() -> Settings:
         raise ConfigError("DISCORD_TOKEN must be set")
 
     try:
-        guild_id = int(discord_section["guild_id"])
-        audit_channel_id = int(discord_section["audit_channel_id"])
+        guild_id = _parse_intlike_value(discord_section["guild_id"])
+        audit_channel_id = _parse_intlike_value(discord_section["audit_channel_id"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ConfigError(
             "discord.guild_id and discord.audit_channel_id must be integer-like"
