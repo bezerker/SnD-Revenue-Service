@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "The Stand and Deliver Revenue Service"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+  "discord.py>=2.7,<3",
+]
 
 [dependency-groups]
 dev = [
