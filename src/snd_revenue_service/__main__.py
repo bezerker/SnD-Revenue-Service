@@ -1,13 +1,27 @@
+import logging
+
+from snd_revenue_service.bot import create_client
 from snd_revenue_service.config import ConfigError, load_settings
+from snd_revenue_service.logging_config import configure_logging
+from snd_revenue_service.publisher import AuditPublisher, PublishError
 
 
 def main() -> None:
+    configure_logging()
+    logger = logging.getLogger(__name__)
     try:
-        load_settings()
+        settings = load_settings()
+        client = create_client(
+            settings,
+            publisher=AuditPublisher(settings.audit_channel_id),
+        )
+        client.run(settings.discord_token)
     except ConfigError as exc:
+        logger.error("startup failed: %s", exc)
         raise SystemExit(str(exc)) from exc
-
-    raise SystemExit("Application startup not implemented yet")
+    except PublishError as exc:
+        logger.error("startup failed: %s", exc)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
