@@ -1,0 +1,5 @@
+.git
+.github
+.pytest_cache
+docs
+tests
