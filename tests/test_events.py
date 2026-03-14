@@ -38,6 +38,13 @@ def test_format_account_age_returns_human_readable_delta() -> None:
     assert format_account_age(created_at, now) == "3 days"
 
 
+def test_format_account_age_uses_singular_day_for_one_day_delta() -> None:
+    created_at = datetime(2026, 3, 12, tzinfo=UTC)
+    now = datetime(2026, 3, 13, tzinfo=UTC)
+
+    assert format_account_age(created_at, now) == "1 day"
+
+
 def test_build_join_event_captures_member_fields() -> None:
     event = build_join_event(DummyMember(), now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC))
 
@@ -61,7 +68,7 @@ def test_build_leave_event_handles_uncached_raw_payload() -> None:
     assert event.mention is None
 
 
-def test_build_leave_event_prefers_cached_member_fields_when_present() -> None:
+def test_build_leave_event_uses_member_fields_when_only_member_is_available() -> None:
     member = DummyMember()
     event = build_leave_event(
         DummyRawPayload(),
@@ -71,5 +78,30 @@ def test_build_leave_event_prefers_cached_member_fields_when_present() -> None:
 
     assert event.user_id == 42
     assert event.username == "new-user"
+    assert event.display_name == "New User"
+    assert event.mention == "<@42>"
+
+
+def test_build_leave_event_mixes_payload_user_and_member_fields() -> None:
+    class PayloadUser:
+        id = 77
+        name = "payload-user"
+        bot = True
+        created_at = datetime(2026, 3, 1, tzinfo=UTC)
+
+    class MixedPayload(DummyRawPayload):
+        user = PayloadUser()
+
+    member = DummyMember()
+    event = build_leave_event(
+        MixedPayload(),
+        member=member,
+        now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC),
+    )
+
+    assert event.user_id == 77
+    assert event.username == "payload-user"
+    assert event.is_bot is True
+    assert event.account_created_at == datetime(2026, 3, 1, tzinfo=UTC)
     assert event.display_name == "New User"
     assert event.mention == "<@42>"
