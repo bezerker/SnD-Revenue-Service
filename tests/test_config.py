@@ -175,3 +175,28 @@ def test_main_exits_cleanly_on_config_error(
 
     with pytest.raises(SystemExit, match="SND_REVENUE_CONFIG"):
         main()
+
+
+def test_main_exits_with_status_one_on_runtime_startup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "[discord]\n"
+        "guild_id = 123\n"
+        "audit_channel_id = 456\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SND_REVENUE_CONFIG", str(config_path))
+    monkeypatch.setenv("DISCORD_TOKEN", "token-value")
+
+    with mock.patch("snd_revenue_service.__main__.create_client", return_value=object()):
+        with mock.patch(
+            "snd_revenue_service.__main__.run_client",
+            new=mock.AsyncMock(side_effect=RuntimeError("gateway failed")),
+        ):
+            with pytest.raises(SystemExit) as context:
+                main()
+
+    assert context.value.code == 1
