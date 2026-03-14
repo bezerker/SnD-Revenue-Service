@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import suppress
 import inspect
 import logging
 from datetime import UTC, datetime
@@ -18,29 +17,27 @@ async def _resolve(value):
 
 async def run_client(client: discord.Client, token: str) -> None:
     startup = client._snd_startup_future()
-    start_task = asyncio.create_task(client.start(token))
+    async with client:
+        start_task = asyncio.create_task(client.start(token))
 
-    try:
-        done, _ = await asyncio.wait(
-            {startup, start_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if startup in done:
-            await startup
+        try:
+            done, _ = await asyncio.wait(
+                {startup, start_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if startup in done:
+                await startup
+                await start_task
+                return
+
             await start_task
-            return
-
-        await start_task
-        if not startup.done():
-            raise RuntimeError("Discord client stopped before startup completed")
-        await startup
-    finally:
-        if not startup.done():
-            startup.cancel()
-        if not start_task.done():
-            await client.close()
-            start_task.cancel()
-            with suppress(asyncio.CancelledError):
+            if not startup.done():
+                raise RuntimeError("Discord client stopped before startup completed")
+            await startup
+        finally:
+            if not startup.done():
+                startup.cancel()
+            if not start_task.done():
                 await start_task
 
 

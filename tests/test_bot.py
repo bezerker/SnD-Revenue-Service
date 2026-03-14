@@ -142,7 +142,34 @@ async def test_event_processing_failures_are_logged_without_raising(
 
 
 @pytest.mark.asyncio
-async def test_run_client_surfaces_bind_failures() -> None:
+async def test_run_client_closes_client_context_on_normal_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+    client = create_client(settings, publisher=publisher)
+
+    enter = AsyncMock(return_value=client)
+    exit_ = AsyncMock(return_value=False)
+    monkeypatch.setattr(discord.Client, "__aenter__", enter)
+    monkeypatch.setattr(discord.Client, "__aexit__", exit_)
+
+    async def fake_start(token: str) -> None:
+        await client._snd_on_ready()
+
+    client.start = fake_start
+
+    await run_client(client, settings.discord_token)
+
+    enter.assert_awaited_once()
+    exit_.assert_awaited_once()
+    assert exit_.await_args.args == (None, None, None)
+
+
+@pytest.mark.asyncio
+async def test_run_client_surfaces_bind_failures_and_closes_client_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     publisher = SimpleNamespace(
         bind=AsyncMock(side_effect=PublishError("Missing send/embed permissions")),
         publish=AsyncMock(),
@@ -150,6 +177,11 @@ async def test_run_client_surfaces_bind_failures() -> None:
     settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
     client = create_client(settings, publisher=publisher)
     client.close = AsyncMock()
+
+    enter = AsyncMock(return_value=client)
+    exit_ = AsyncMock(return_value=False)
+    monkeypatch.setattr(discord.Client, "__aenter__", enter)
+    monkeypatch.setattr(discord.Client, "__aexit__", exit_)
 
     async def fake_start(token: str) -> None:
         await client._snd_on_ready()
@@ -160,6 +192,9 @@ async def test_run_client_surfaces_bind_failures() -> None:
     with pytest.raises(PublishError, match="Missing send/embed permissions"):
         await run_client(client, settings.discord_token)
 
+    enter.assert_awaited_once()
+    exit_.assert_awaited_once()
+    assert exit_.await_args.args[0] is PublishError
     client.close.assert_awaited_once()
 
 
