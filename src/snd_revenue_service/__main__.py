@@ -1,6 +1,7 @@
+import asyncio
 import logging
 
-from snd_revenue_service.bot import create_client
+from snd_revenue_service.bot import create_client, run_client
 from snd_revenue_service.config import ConfigError, load_settings
 from snd_revenue_service.logging_config import configure_logging
 from snd_revenue_service.publisher import AuditPublisher, PublishError
@@ -15,7 +16,7 @@ def main() -> None:
             settings,
             publisher=AuditPublisher(settings.audit_channel_id),
         )
-        client.run(settings.discord_token)
+        asyncio.run(run_client(client, settings.discord_token))
     except ConfigError as exc:
         logger.error("startup failed: %s", exc)
         raise SystemExit(str(exc)) from exc

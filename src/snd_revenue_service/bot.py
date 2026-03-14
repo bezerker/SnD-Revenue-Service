@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import suppress
 import inspect
 import logging
 from datetime import UTC, datetime
@@ -12,6 +14,34 @@ async def _resolve(value):
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+async def run_client(client: discord.Client, token: str) -> None:
+    startup = client._snd_startup_future()
+    start_task = asyncio.create_task(client.start(token))
+
+    try:
+        done, _ = await asyncio.wait(
+            {startup, start_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if startup in done:
+            await startup
+            await start_task
+            return
+
+        await start_task
+        if not startup.done():
+            raise RuntimeError("Discord client stopped before startup completed")
+        await startup
+    finally:
+        if not startup.done():
+            startup.cancel()
+        if not start_task.done():
+            await client.close()
+            start_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await start_task
 
 
 def create_client(
@@ -29,14 +59,26 @@ def create_client(
 
     client = discord.Client(intents=intents)
     logger = logging.getLogger(__name__)
+    startup_complete: asyncio.Future[None] | None = None
+
+    def startup_future() -> asyncio.Future[None]:
+        nonlocal startup_complete
+        if startup_complete is None:
+            startup_complete = asyncio.get_running_loop().create_future()
+        return startup_complete
 
     async def on_ready() -> None:
+        startup = startup_future()
+        if startup.done():
+            return
         try:
             await publisher.bind(client)
-        except Exception:
+        except Exception as exc:
             logger.exception("failed to bind audit publisher")
+            startup.set_exception(exc)
             await client.close()
-            raise
+            return
+        startup.set_result(None)
         logger.info("bot ready")
 
     async def publish_event(event, render) -> None:
@@ -89,6 +131,8 @@ def create_client(
     client.event(on_ready)
     client.event(on_member_join)
     client.event(on_raw_member_remove)
+    client._snd_on_ready = on_ready
     client._snd_on_member_join = on_member_join
     client._snd_on_raw_member_remove = on_raw_member_remove
+    client._snd_startup_future = startup_future
     return client

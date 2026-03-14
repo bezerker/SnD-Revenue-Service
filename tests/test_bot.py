@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -9,7 +10,7 @@ import pytest
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from snd_revenue_service.bot import create_client
+from snd_revenue_service.bot import create_client, run_client
 from snd_revenue_service.config import Settings
 from snd_revenue_service.publisher import AuditPublisher, PublishError
 
@@ -141,13 +142,56 @@ async def test_event_processing_failures_are_logged_without_raising(
 
 
 @pytest.mark.asyncio
-async def test_audit_publisher_rejects_missing_embed_permission() -> None:
+async def test_run_client_surfaces_bind_failures() -> None:
+    publisher = SimpleNamespace(
+        bind=AsyncMock(side_effect=PublishError("Missing send/embed permissions")),
+        publish=AsyncMock(),
+    )
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+    client = create_client(settings, publisher=publisher)
+    client.close = AsyncMock()
+
+    async def fake_start(token: str) -> None:
+        await client._snd_on_ready()
+        await asyncio.sleep(0)
+
+    client.start = fake_start
+
+    with pytest.raises(PublishError, match="Missing send/embed permissions"):
+        await run_client(client, settings.discord_token)
+
+    client.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_audit_publisher_rejects_non_text_channel_objects() -> None:
     permissions = SimpleNamespace(send_messages=True, embed_links=False)
     me = object()
     channel = SimpleNamespace(
         guild=SimpleNamespace(me=me),
         permissions_for=lambda member: permissions,
     )
+    client = SimpleNamespace(get_channel=lambda channel_id: channel)
+    publisher = AuditPublisher(channel_id=456)
+
+    with pytest.raises(PublishError, match="not a text channel"):
+        await publisher.bind(client)
+
+
+@pytest.mark.asyncio
+async def test_audit_publisher_rejects_missing_embed_permission_on_text_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    permissions = SimpleNamespace(send_messages=True, embed_links=False)
+    me = object()
+    channel = object.__new__(discord.TextChannel)
+    channel.guild = SimpleNamespace(me=me)
+    monkeypatch.setattr(
+        discord.TextChannel,
+        "permissions_for",
+        lambda self, member: permissions,
+    )
+
     client = SimpleNamespace(get_channel=lambda channel_id: channel)
     publisher = AuditPublisher(channel_id=456)
 

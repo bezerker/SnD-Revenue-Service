@@ -12,10 +12,7 @@ class AuditPublisher:
 
     async def bind(self, client: discord.Client) -> None:
         channel = client.get_channel(self.channel_id)
-        if channel is None or (
-            not isinstance(channel, discord.TextChannel)
-            and not (hasattr(channel, "guild") and hasattr(channel, "permissions_for"))
-        ):
+        if not isinstance(channel, discord.TextChannel):
             raise PublishError(f"Audit channel {self.channel_id} is not a text channel")
 
         permissions = channel.permissions_for(channel.guild.me)
