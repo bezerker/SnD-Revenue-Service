@@ -26,7 +26,11 @@ def _parse_intlike_value(value: object) -> int:
     if isinstance(value, float):
         raise TypeError("float values are not valid IDs")
 
-    return int(value)
+    parsed = int(value)
+    if parsed <= 0:
+        raise ValueError("IDs must be positive integers")
+
+    return parsed
 
 
 def load_settings() -> Settings:
@@ -56,7 +60,7 @@ def load_settings() -> Settings:
         audit_channel_id = _parse_intlike_value(discord_section["audit_channel_id"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ConfigError(
-            "discord.guild_id and discord.audit_channel_id must be integer-like"
+            "discord.guild_id and discord.audit_channel_id must be positive integer-like values"
         ) from exc
 
     return Settings(
