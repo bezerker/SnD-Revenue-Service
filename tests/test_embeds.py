@@ -57,6 +57,8 @@ def test_render_leave_embed_renders_optional_account_fields_when_available() -> 
         mention=None,
         is_bot=True,
         account_created_at=datetime(2026, 3, 10, tzinfo=UTC),
+        kicked_by=None,
+        kick_reason=None,
         left_at=datetime(2026, 3, 13, 13, 0, tzinfo=UTC),
     )
 
@@ -82,6 +84,8 @@ def test_render_leave_embed_uses_explicit_fallbacks_for_missing_fields() -> None
         mention=None,
         is_bot=None,
         account_created_at=None,
+        kicked_by=None,
+        kick_reason=None,
         left_at=datetime(2026, 3, 13, 13, 0, tzinfo=UTC),
     )
 
@@ -91,5 +95,33 @@ def test_render_leave_embed_uses_explicit_fallbacks_for_missing_fields() -> None
     assert _field_snapshot(embed) == [
         ("User ID", "55", True),
         ("Username", "Unavailable", True),
+        ("Left At", _formatted_timestamp(event.left_at), True),
+    ]
+
+
+def test_render_leave_embed_renders_kick_specific_fields() -> None:
+    event = LeaveAuditEvent(
+        event_type="member_kicked",
+        guild_id=1,
+        user_id=77,
+        username="kicked-user",
+        display_name=None,
+        mention=None,
+        is_bot=False,
+        account_created_at=None,
+        kicked_by="<@123>",
+        kick_reason="spamming",
+        left_at=datetime(2026, 3, 13, 13, 0, tzinfo=UTC),
+    )
+
+    embed = render_leave_embed(event)
+
+    assert embed.title == "Member Kicked"
+    assert _field_snapshot(embed) == [
+        ("User ID", "77", True),
+        ("Username", "kicked-user", True),
+        ("Account Type", "Human", True),
+        ("Kicked By", "<@123>", True),
+        ("Kick Reason", "spamming", False),
         ("Left At", _formatted_timestamp(event.left_at), True),
     ]

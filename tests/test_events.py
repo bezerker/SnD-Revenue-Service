@@ -105,3 +105,18 @@ def test_build_leave_event_mixes_payload_user_and_member_fields() -> None:
     assert event.account_created_at == datetime(2026, 3, 1, tzinfo=UTC)
     assert event.display_name == "New User"
     assert event.mention == "<@42>"
+
+
+def test_build_leave_event_captures_kick_metadata() -> None:
+    event = build_leave_event(
+        DummyRawPayload(),
+        member=None,
+        now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC),
+        event_type="member_kicked",
+        kicked_by="mod-user",
+        kick_reason="rule violation",
+    )
+
+    assert event.event_type == "member_kicked"
+    assert event.kicked_by == "mod-user"
+    assert event.kick_reason == "rule violation"

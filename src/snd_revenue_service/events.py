@@ -26,6 +26,8 @@ class LeaveAuditEvent:
     mention: str | None
     is_bot: bool | None
     account_created_at: datetime | None
+    kicked_by: str | None
+    kick_reason: str | None
     left_at: datetime
 
 
@@ -50,11 +52,19 @@ def build_join_event(member, now: datetime) -> JoinAuditEvent:
     )
 
 
-def build_leave_event(payload, *, member, now: datetime) -> LeaveAuditEvent:
+def build_leave_event(
+    payload,
+    *,
+    member,
+    now: datetime,
+    event_type: str = "member_left",
+    kicked_by: str | None = None,
+    kick_reason: str | None = None,
+) -> LeaveAuditEvent:
     user = getattr(payload, "user", None) or member
     user_id = getattr(user, "id", payload.user_id)
     return LeaveAuditEvent(
-        event_type="member_left",
+        event_type=event_type,
         guild_id=payload.guild_id,
         user_id=user_id,
         username=getattr(user, "name", None),
@@ -62,5 +72,7 @@ def build_leave_event(payload, *, member, now: datetime) -> LeaveAuditEvent:
         mention=getattr(member, "mention", None),
         is_bot=getattr(user, "bot", None),
         account_created_at=getattr(user, "created_at", None),
+        kicked_by=kicked_by,
+        kick_reason=kick_reason,
         left_at=now,
     )

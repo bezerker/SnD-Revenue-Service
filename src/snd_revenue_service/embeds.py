@@ -24,7 +24,8 @@ def render_join_embed(event: JoinAuditEvent) -> discord.Embed:
 
 
 def render_leave_embed(event: LeaveAuditEvent) -> discord.Embed:
-    embed = discord.Embed(title="Member Left")
+    title = "Member Kicked" if event.event_type == "member_kicked" else "Member Left"
+    embed = discord.Embed(title=title)
     embed.add_field(name="User ID", value=str(event.user_id), inline=True)
     embed.add_field(name="Username", value=event.username or "Unavailable", inline=True)
     if event.is_bot is not None:
@@ -35,5 +36,9 @@ def render_leave_embed(event: LeaveAuditEvent) -> discord.Embed:
             value=discord.utils.format_dt(event.account_created_at, style="f"),
             inline=False,
         )
+    if event.event_type == "member_kicked":
+        embed.add_field(name="Kicked By", value=event.kicked_by or "Unavailable", inline=True)
+        if event.kick_reason:
+            embed.add_field(name="Kick Reason", value=event.kick_reason, inline=False)
     embed.add_field(name="Left At", value=discord.utils.format_dt(event.left_at, style="f"), inline=True)
     return embed
