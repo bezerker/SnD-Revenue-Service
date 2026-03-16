@@ -8,6 +8,9 @@ import discord
 from snd_revenue_service.embeds import render_join_embed, render_leave_embed
 from snd_revenue_service.events import build_join_event, build_leave_event
 
+AUDIT_MATCH_WINDOW = timedelta(seconds=30)
+AUDIT_LOOKUP_RETRY_DELAYS = (0.0, 0.75)
+
 
 async def _resolve(value):
     if inspect.isawaitable(value):
@@ -15,30 +18,65 @@ async def _resolve(value):
     return value
 
 
-async def _latest_kick_for_user(guild, user_id: int, *, now: datetime):
+def _can_view_audit_log(guild) -> bool:
     if guild is None:
-        return None
+        return False
     me = getattr(guild, "me", None)
     if me is None:
-        return None
+        return False
     perms = getattr(guild, "permissions_for", lambda _member: None)(me)
-    if not perms or not getattr(perms, "view_audit_log", False):
+    return bool(perms and getattr(perms, "view_audit_log", False))
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+async def _latest_audit_entry_for_user(guild, user_id: int, *, action, now: datetime):
+    if not _can_view_audit_log(guild):
         return None
 
     try:
-        async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
+        async for entry in guild.audit_logs(limit=8, action=action):
             target_id = getattr(getattr(entry, "target", None), "id", None)
             if target_id != user_id:
                 continue
-            created_at = getattr(entry, "created_at", None)
+            created_at = _as_utc(getattr(entry, "created_at", None))
             if created_at is None:
                 continue
-            if now - created_at > timedelta(seconds=15):
+            if now - created_at > AUDIT_MATCH_WINDOW:
                 continue
             return entry
     except Exception:
-        logging.getLogger(__name__).debug("failed to inspect kick audit logs", exc_info=True)
+        logging.getLogger(__name__).debug(
+            "failed to inspect audit logs action=%s",
+            action,
+            exc_info=True,
+        )
     return None
+
+
+async def _latest_moderation_action_for_user(guild, user_id: int, *, now: datetime):
+    if not _can_view_audit_log(guild):
+        return "member_left", None
+
+    action_type_map = (
+        (discord.AuditLogAction.ban, "member_banned"),
+        (discord.AuditLogAction.kick, "member_kicked"),
+    )
+    for index, retry_delay in enumerate(AUDIT_LOOKUP_RETRY_DELAYS):
+        if index > 0:
+            await asyncio.sleep(retry_delay)
+        for action, event_type in action_type_map:
+            entry = await _latest_audit_entry_for_user(guild, user_id, action=action, now=now)
+            if entry is not None:
+                return event_type, entry
+    return "member_left", None
+
 
 async def run_client(client: discord.Client, token: str) -> None:
     startup = client._snd_startup_future()
@@ -145,9 +183,12 @@ def create_client(
             kicked_by = None
             kick_reason = None
             if payload_user_id is not None:
-                entry = await _latest_kick_for_user(guild, payload_user_id, now=now)
+                event_type, entry = await _latest_moderation_action_for_user(
+                    guild,
+                    payload_user_id,
+                    now=now,
+                )
                 if entry is not None:
-                    event_type = "member_kicked"
                     actor = getattr(entry, "user", None)
                     kicked_by = getattr(actor, "mention", None) or getattr(actor, "name", None)
                     kick_reason = getattr(entry, "reason", None)

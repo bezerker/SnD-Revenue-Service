@@ -62,7 +62,11 @@ def build_leave_event(
     kick_reason: str | None = None,
 ) -> LeaveAuditEvent:
     user = getattr(payload, "user", None) or member
-    user_id = getattr(user, "id", payload.user_id)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        user_id = getattr(payload, "user_id", None)
+    if user_id is None:
+        user_id = getattr(member, "id", None)
     return LeaveAuditEvent(
         event_type=event_type,
         guild_id=payload.guild_id,

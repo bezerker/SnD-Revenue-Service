@@ -256,24 +256,35 @@ async def test_on_raw_member_remove_marks_recent_audit_kick() -> None:
     )
 
     class AuditLogs:
-        def __aiter__(self):
-            entry = SimpleNamespace(
-                target=SimpleNamespace(id=77),
-                created_at=datetime.now(UTC),
-                user=SimpleNamespace(mention="<@9001>", name="mod"),
-                reason="rule violation",
-            )
+        def __init__(self, entries):
+            self.entries = entries
 
+        def __aiter__(self):
             async def _gen():
-                yield entry
+                for entry in self.entries:
+                    yield entry
 
             return _gen()
+
+    def _audit_logs(*, action, **kwargs):
+        if action == discord.AuditLogAction.kick:
+            return AuditLogs(
+                [
+                    SimpleNamespace(
+                        target=SimpleNamespace(id=77),
+                        created_at=datetime.now(UTC),
+                        user=SimpleNamespace(mention="<@9001>", name="mod"),
+                        reason="rule violation",
+                    )
+                ]
+            )
+        return AuditLogs([])
 
     guild = SimpleNamespace(
         me=object(),
         permissions_for=lambda _member: SimpleNamespace(view_audit_log=True),
         get_member=lambda user_id: None,
-        audit_logs=lambda **kwargs: AuditLogs(),
+        audit_logs=_audit_logs,
     )
     client.get_guild = lambda guild_id: guild
 
@@ -284,4 +295,67 @@ async def test_on_raw_member_remove_marks_recent_audit_kick() -> None:
     assert kwargs["event_type"] == "member_kicked"
     assert kwargs["kicked_by"] == "<@9001>"
     assert kwargs["kick_reason"] == "rule violation"
+    publisher.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_raw_member_remove_marks_recent_audit_ban() -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    renderer = AsyncMock(return_value=discord.Embed(title="Member Left"))
+    builder = AsyncMock(
+        return_value=SimpleNamespace(
+            event_type="member_banned",
+            guild_id=123,
+            user_id=77,
+        )
+    )
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+
+    client = create_client(
+        settings,
+        publisher=publisher,
+        render_leave=renderer,
+        build_leave=builder,
+    )
+
+    class AuditLogs:
+        def __init__(self, entries):
+            self.entries = entries
+
+        def __aiter__(self):
+            async def _gen():
+                for entry in self.entries:
+                    yield entry
+
+            return _gen()
+
+    def _audit_logs(*, action, **kwargs):
+        if action == discord.AuditLogAction.ban:
+            return AuditLogs(
+                [
+                    SimpleNamespace(
+                        target=SimpleNamespace(id=77),
+                        created_at=datetime.now(UTC),
+                        user=SimpleNamespace(mention="<@4444>", name="admin"),
+                        reason="repeat abuse",
+                    )
+                ]
+            )
+        return AuditLogs([])
+
+    guild = SimpleNamespace(
+        me=object(),
+        permissions_for=lambda _member: SimpleNamespace(view_audit_log=True),
+        get_member=lambda user_id: None,
+        audit_logs=_audit_logs,
+    )
+    client.get_guild = lambda guild_id: guild
+
+    payload = SimpleNamespace(guild_id=123, user=SimpleNamespace(id=77), user_id=77)
+    await client._snd_on_raw_member_remove(payload)
+
+    _, kwargs = builder.await_args
+    assert kwargs["event_type"] == "member_banned"
+    assert kwargs["kicked_by"] == "<@4444>"
+    assert kwargs["kick_reason"] == "repeat abuse"
     publisher.publish.assert_awaited_once()
