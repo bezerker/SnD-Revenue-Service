@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import discord
 
@@ -14,6 +14,31 @@ async def _resolve(value):
         return await value
     return value
 
+
+async def _latest_kick_for_user(guild, user_id: int, *, now: datetime):
+    if guild is None:
+        return None
+    me = getattr(guild, "me", None)
+    if me is None:
+        return None
+    perms = getattr(guild, "permissions_for", lambda _member: None)(me)
+    if not perms or not getattr(perms, "view_audit_log", False):
+        return None
+
+    try:
+        async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.kick):
+            target_id = getattr(getattr(entry, "target", None), "id", None)
+            if target_id != user_id:
+                continue
+            created_at = getattr(entry, "created_at", None)
+            if created_at is None:
+                continue
+            if now - created_at > timedelta(seconds=15):
+                continue
+            return entry
+    except Exception:
+        logging.getLogger(__name__).debug("failed to inspect kick audit logs", exc_info=True)
+    return None
 
 async def run_client(client: discord.Client, token: str) -> None:
     startup = client._snd_startup_future()
@@ -109,17 +134,39 @@ def create_client(
     async def on_raw_member_remove(payload) -> None:
         if payload.guild_id != settings.guild_id:
             return
+        now = datetime.now(UTC)
+        event_type = "member_left"
         try:
             guild = client.get_guild(payload.guild_id)
-            cached_member = guild.get_member(payload.user.id) if guild and payload.user else None
+            payload_user = getattr(payload, "user", None)
+            payload_user_id = getattr(payload_user, "id", getattr(payload, "user_id", None))
+            cached_member = guild.get_member(payload_user_id) if guild and payload_user_id else None
+
+            kicked_by = None
+            kick_reason = None
+            if payload_user_id is not None:
+                entry = await _latest_kick_for_user(guild, payload_user_id, now=now)
+                if entry is not None:
+                    event_type = "member_kicked"
+                    actor = getattr(entry, "user", None)
+                    kicked_by = getattr(actor, "mention", None) or getattr(actor, "name", None)
+                    kick_reason = getattr(entry, "reason", None)
+
             event = await _resolve(
-                build_leave(payload, member=cached_member, now=datetime.now(UTC))
+                build_leave(
+                    payload,
+                    member=cached_member,
+                    now=now,
+                    event_type=event_type,
+                    kicked_by=kicked_by,
+                    kick_reason=kick_reason,
+                )
             )
             await publish_event(event, render_leave)
         except Exception as exc:
             logger.exception(
                 "audit event processing failed event_type=%s guild_id=%s user_id=%s reason=%s",
-                "member_left",
+                event_type,
                 payload.guild_id,
                 getattr(payload, "user_id", "unknown"),
                 exc,

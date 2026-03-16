@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -232,3 +233,55 @@ async def test_audit_publisher_rejects_missing_embed_permission_on_text_channel(
 
     with pytest.raises(PublishError, match="Missing send/embed permissions"):
         await publisher.bind(client)
+
+
+@pytest.mark.asyncio
+async def test_on_raw_member_remove_marks_recent_audit_kick() -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    renderer = AsyncMock(return_value=discord.Embed(title="Member Left"))
+    builder = AsyncMock(
+        return_value=SimpleNamespace(
+            event_type="member_kicked",
+            guild_id=123,
+            user_id=77,
+        )
+    )
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+
+    client = create_client(
+        settings,
+        publisher=publisher,
+        render_leave=renderer,
+        build_leave=builder,
+    )
+
+    class AuditLogs:
+        def __aiter__(self):
+            entry = SimpleNamespace(
+                target=SimpleNamespace(id=77),
+                created_at=datetime.now(UTC),
+                user=SimpleNamespace(mention="<@9001>", name="mod"),
+                reason="rule violation",
+            )
+
+            async def _gen():
+                yield entry
+
+            return _gen()
+
+    guild = SimpleNamespace(
+        me=object(),
+        permissions_for=lambda _member: SimpleNamespace(view_audit_log=True),
+        get_member=lambda user_id: None,
+        audit_logs=lambda **kwargs: AuditLogs(),
+    )
+    client.get_guild = lambda guild_id: guild
+
+    payload = SimpleNamespace(guild_id=123, user=SimpleNamespace(id=77), user_id=77)
+    await client._snd_on_raw_member_remove(payload)
+
+    _, kwargs = builder.await_args
+    assert kwargs["event_type"] == "member_kicked"
+    assert kwargs["kicked_by"] == "<@9001>"
+    assert kwargs["kick_reason"] == "rule violation"
+    publisher.publish.assert_awaited_once()
