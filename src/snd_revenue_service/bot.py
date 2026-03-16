@@ -180,8 +180,8 @@ def create_client(
             payload_user_id = getattr(payload_user, "id", getattr(payload, "user_id", None))
             cached_member = guild.get_member(payload_user_id) if guild and payload_user_id else None
 
-            kicked_by = None
-            kick_reason = None
+            moderated_by = None
+            moderation_reason = None
             if payload_user_id is not None:
                 event_type, entry = await _latest_moderation_action_for_user(
                     guild,
@@ -190,8 +190,8 @@ def create_client(
                 )
                 if entry is not None:
                     actor = getattr(entry, "user", None)
-                    kicked_by = getattr(actor, "mention", None) or getattr(actor, "name", None)
-                    kick_reason = getattr(entry, "reason", None)
+                    moderated_by = getattr(actor, "mention", None) or getattr(actor, "name", None)
+                    moderation_reason = getattr(entry, "reason", None)
 
             event = await _resolve(
                 build_leave(
@@ -199,8 +199,8 @@ def create_client(
                     member=cached_member,
                     now=now,
                     event_type=event_type,
-                    kicked_by=kicked_by,
-                    kick_reason=kick_reason,
+                    moderated_by=moderated_by,
+                    moderation_reason=moderation_reason,
                 )
             )
             await publish_event(event, render_leave)

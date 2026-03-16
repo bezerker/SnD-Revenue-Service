@@ -26,8 +26,8 @@ class LeaveAuditEvent:
     mention: str | None
     is_bot: bool | None
     account_created_at: datetime | None
-    kicked_by: str | None
-    kick_reason: str | None
+    moderated_by: str | None
+    moderation_reason: str | None
     left_at: datetime
 
 
@@ -58,8 +58,8 @@ def build_leave_event(
     member,
     now: datetime,
     event_type: str = "member_left",
-    kicked_by: str | None = None,
-    kick_reason: str | None = None,
+    moderated_by: str | None = None,
+    moderation_reason: str | None = None,
 ) -> LeaveAuditEvent:
     user = getattr(payload, "user", None) or member
     user_id = getattr(user, "id", None)
@@ -67,6 +67,8 @@ def build_leave_event(
         user_id = getattr(payload, "user_id", None)
     if user_id is None:
         user_id = getattr(member, "id", None)
+    if user_id is None:
+        raise ValueError("could not resolve user_id from payload or cached member")
     return LeaveAuditEvent(
         event_type=event_type,
         guild_id=payload.guild_id,
@@ -76,7 +78,7 @@ def build_leave_event(
         mention=getattr(member, "mention", None),
         is_bot=getattr(user, "bot", None),
         account_created_at=getattr(user, "created_at", None),
-        kicked_by=kicked_by,
-        kick_reason=kick_reason,
+        moderated_by=moderated_by,
+        moderation_reason=moderation_reason,
         left_at=now,
     )

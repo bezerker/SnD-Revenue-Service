@@ -293,8 +293,8 @@ async def test_on_raw_member_remove_marks_recent_audit_kick() -> None:
 
     _, kwargs = builder.await_args
     assert kwargs["event_type"] == "member_kicked"
-    assert kwargs["kicked_by"] == "<@9001>"
-    assert kwargs["kick_reason"] == "rule violation"
+    assert kwargs["moderated_by"] == "<@9001>"
+    assert kwargs["moderation_reason"] == "rule violation"
     publisher.publish.assert_awaited_once()
 
 
@@ -356,6 +356,6 @@ async def test_on_raw_member_remove_marks_recent_audit_ban() -> None:
 
     _, kwargs = builder.await_args
     assert kwargs["event_type"] == "member_banned"
-    assert kwargs["kicked_by"] == "<@4444>"
-    assert kwargs["kick_reason"] == "repeat abuse"
+    assert kwargs["moderated_by"] == "<@4444>"
+    assert kwargs["moderation_reason"] == "repeat abuse"
     publisher.publish.assert_awaited_once()

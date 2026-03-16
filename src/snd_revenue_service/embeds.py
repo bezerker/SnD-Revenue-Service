@@ -44,8 +44,8 @@ def render_leave_embed(event: LeaveAuditEvent) -> discord.Embed:
     if event.event_type in {"member_kicked", "member_banned"}:
         actor_label = "Kicked By" if event.event_type == "member_kicked" else "Banned By"
         reason_label = "Kick Reason" if event.event_type == "member_kicked" else "Ban Reason"
-        embed.add_field(name=actor_label, value=event.kicked_by or "Unavailable", inline=True)
-        if event.kick_reason:
-            embed.add_field(name=reason_label, value=event.kick_reason, inline=False)
+        embed.add_field(name=actor_label, value=event.moderated_by or "Unavailable", inline=True)
+        if event.moderation_reason:
+            embed.add_field(name=reason_label, value=event.moderation_reason, inline=False)
     embed.add_field(name="Left At", value=discord.utils.format_dt(event.left_at, style="f"), inline=True)
     return embed
