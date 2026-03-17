@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 import sys
 
+import pytest
+
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
@@ -113,10 +115,43 @@ def test_build_leave_event_captures_kick_metadata() -> None:
         member=None,
         now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC),
         event_type="member_kicked",
-        kicked_by="mod-user",
-        kick_reason="rule violation",
+        moderated_by="mod-user",
+        moderation_reason="rule violation",
     )
 
     assert event.event_type == "member_kicked"
-    assert event.kicked_by == "mod-user"
-    assert event.kick_reason == "rule violation"
+    assert event.moderated_by == "mod-user"
+    assert event.moderation_reason == "rule violation"
+
+
+def test_build_leave_event_handles_payloads_without_user_id_attribute() -> None:
+    class RawPayloadLikeEvent:
+        guild_id = 999
+
+        class user:
+            id = 77
+            name = "raw-user"
+            bot = False
+            created_at = datetime(2026, 3, 1, tzinfo=UTC)
+
+    event = build_leave_event(
+        RawPayloadLikeEvent(),
+        member=None,
+        now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC),
+    )
+
+    assert event.user_id == 77
+    assert event.username == "raw-user"
+
+
+def test_build_leave_event_raises_when_user_id_cannot_be_resolved() -> None:
+    class MissingIdPayload:
+        guild_id = 999
+        user = object()
+
+    with pytest.raises(ValueError, match="could not resolve user_id"):
+        build_leave_event(
+            MissingIdPayload(),
+            member=None,
+            now=datetime(2026, 3, 13, 12, 0, tzinfo=UTC),
+        )

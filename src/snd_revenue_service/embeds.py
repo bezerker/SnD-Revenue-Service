@@ -24,7 +24,12 @@ def render_join_embed(event: JoinAuditEvent) -> discord.Embed:
 
 
 def render_leave_embed(event: LeaveAuditEvent) -> discord.Embed:
-    title = "Member Kicked" if event.event_type == "member_kicked" else "Member Left"
+    title_map = {
+        "member_left": "Member Left",
+        "member_kicked": "Member Kicked",
+        "member_banned": "Member Banned",
+    }
+    title = title_map.get(event.event_type, "Member Left")
     embed = discord.Embed(title=title)
     embed.add_field(name="User ID", value=str(event.user_id), inline=True)
     embed.add_field(name="Username", value=event.username or "Unavailable", inline=True)
@@ -36,9 +41,11 @@ def render_leave_embed(event: LeaveAuditEvent) -> discord.Embed:
             value=discord.utils.format_dt(event.account_created_at, style="f"),
             inline=False,
         )
-    if event.event_type == "member_kicked":
-        embed.add_field(name="Kicked By", value=event.kicked_by or "Unavailable", inline=True)
-        if event.kick_reason:
-            embed.add_field(name="Kick Reason", value=event.kick_reason, inline=False)
+    if event.event_type in {"member_kicked", "member_banned"}:
+        actor_label = "Kicked By" if event.event_type == "member_kicked" else "Banned By"
+        reason_label = "Kick Reason" if event.event_type == "member_kicked" else "Ban Reason"
+        embed.add_field(name=actor_label, value=event.moderated_by or "Unavailable", inline=True)
+        if event.moderation_reason:
+            embed.add_field(name=reason_label, value=event.moderation_reason, inline=False)
     embed.add_field(name="Left At", value=discord.utils.format_dt(event.left_at, style="f"), inline=True)
     return embed

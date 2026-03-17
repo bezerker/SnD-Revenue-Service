@@ -60,9 +60,10 @@ Join embed:
 
 Leave embed:
 
-- member mention or fallback name
+- leave type (`Member Left`, `Member Kicked`, or `Member Banned`)
 - username and Discord user ID when available
 - bot or human label
+- moderator and reason fields for kicks/bans when available from audit logs
 - leave timestamp
 
 ## Running With uv
