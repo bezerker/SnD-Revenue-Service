@@ -359,3 +359,64 @@ async def test_on_raw_member_remove_marks_recent_audit_ban() -> None:
     assert kwargs["moderated_by"] == "<@4444>"
     assert kwargs["moderation_reason"] == "repeat abuse"
     publisher.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_raw_member_remove_uses_me_guild_permissions_for_audit_access() -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    renderer = AsyncMock(return_value=discord.Embed(title="Member Left"))
+    builder = AsyncMock(
+        return_value=SimpleNamespace(
+            event_type="member_kicked",
+            guild_id=123,
+            user_id=77,
+        )
+    )
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+
+    client = create_client(
+        settings,
+        publisher=publisher,
+        render_leave=renderer,
+        build_leave=builder,
+    )
+
+    class AuditLogs:
+        def __init__(self, entries):
+            self.entries = entries
+
+        def __aiter__(self):
+            async def _gen():
+                for entry in self.entries:
+                    yield entry
+
+            return _gen()
+
+    def _audit_logs(*, action, **kwargs):
+        if action == discord.AuditLogAction.kick:
+            return AuditLogs(
+                [
+                    SimpleNamespace(
+                        target=SimpleNamespace(id=77),
+                        created_at=datetime.now(UTC),
+                        user=SimpleNamespace(mention="<@777>", name="mod"),
+                        reason="rule violation",
+                    )
+                ]
+            )
+        return AuditLogs([])
+
+    guild = SimpleNamespace(
+        me=SimpleNamespace(guild_permissions=SimpleNamespace(view_audit_log=True)),
+        get_member=lambda user_id: None,
+        audit_logs=_audit_logs,
+    )
+    client.get_guild = lambda guild_id: guild
+
+    payload = SimpleNamespace(guild_id=123, user=SimpleNamespace(id=77), user_id=77)
+    await client._snd_on_raw_member_remove(payload)
+
+    _, kwargs = builder.await_args
+    assert kwargs["event_type"] == "member_kicked"
+    assert kwargs["moderated_by"] == "<@777>"
+    assert kwargs["moderation_reason"] == "rule violation"

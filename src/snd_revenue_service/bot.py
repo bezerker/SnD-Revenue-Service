@@ -24,8 +24,18 @@ def _can_view_audit_log(guild) -> bool:
     me = getattr(guild, "me", None)
     if me is None:
         return False
-    perms = getattr(guild, "permissions_for", lambda _member: None)(me)
-    return bool(perms and getattr(perms, "view_audit_log", False))
+
+    # In discord.py, guild-level permissions live on Member.guild_permissions.
+    guild_perms = getattr(me, "guild_permissions", None)
+    if guild_perms is not None:
+        return bool(getattr(guild_perms, "view_audit_log", False))
+
+    # Fallback for tests/stubs that provide a permissions_for shim.
+    perms_for = getattr(guild, "permissions_for", None)
+    if callable(perms_for):
+        perms = perms_for(me)
+        return bool(perms and getattr(perms, "view_audit_log", False))
+    return False
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
