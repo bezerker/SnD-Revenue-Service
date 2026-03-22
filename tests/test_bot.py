@@ -13,6 +13,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from snd_revenue_service.bot import create_client, run_client
 from snd_revenue_service.config import Settings
+from snd_revenue_service.join_risk import JoinRiskResult
 from snd_revenue_service.publisher import AuditPublisher, PublishError
 
 
@@ -420,3 +421,85 @@ async def test_on_raw_member_remove_uses_me_guild_permissions_for_audit_access()
     assert kwargs["event_type"] == "member_kicked"
     assert kwargs["moderated_by"] == "<@777>"
     assert kwargs["moderation_reason"] == "rule violation"
+
+
+@pytest.mark.asyncio
+async def test_on_member_join_publishes_risk_follow_up_when_service_configured() -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    renderer = AsyncMock(return_value=discord.Embed(title="Member Joined"))
+    builder = AsyncMock(
+        return_value=SimpleNamespace(
+            event_type="member_joined",
+            guild_id=123,
+            user_id=42,
+        )
+    )
+    risk_service = SimpleNamespace(
+        assess=AsyncMock(
+            return_value=JoinRiskResult(
+                risk_score=10,
+                category="likely_human",
+                rationale="ok",
+                signals=["signal a"],
+            )
+        )
+    )
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+
+    client = create_client(
+        settings,
+        publisher=publisher,
+        join_risk_service=risk_service,
+        render_join=renderer,
+        build_join=builder,
+        profile_snapshot=lambda m, *, now: {"user_id": m.id},
+    )
+    member = SimpleNamespace(
+        guild=SimpleNamespace(id=123),
+        id=42,
+        mention="<@42>",
+        name="joiner",
+    )
+
+    await client._snd_on_member_join(member)
+    await asyncio.sleep(0)
+
+    assert publisher.publish.await_count == 2
+    risk_service.assess.assert_awaited_once_with({"user_id": 42})
+    second_embed = publisher.publish.await_args_list[1].args[0]
+    assert second_embed.title == "Join risk assessment"
+
+
+@pytest.mark.asyncio
+async def test_on_member_join_risk_assessment_failure_still_publishes_join_only() -> None:
+    publisher = SimpleNamespace(bind=AsyncMock(), publish=AsyncMock())
+    renderer = AsyncMock(return_value=discord.Embed(title="Member Joined"))
+    builder = AsyncMock(
+        return_value=SimpleNamespace(
+            event_type="member_joined",
+            guild_id=123,
+            user_id=42,
+        )
+    )
+    risk_service = SimpleNamespace(assess=AsyncMock(side_effect=RuntimeError("LLM unavailable")))
+    settings = Settings(123, 456, "token", Path("/tmp/config.toml"))
+
+    client = create_client(
+        settings,
+        publisher=publisher,
+        join_risk_service=risk_service,
+        render_join=renderer,
+        build_join=builder,
+        profile_snapshot=lambda m, *, now: {"user_id": m.id},
+    )
+    member = SimpleNamespace(
+        guild=SimpleNamespace(id=123),
+        id=42,
+        mention="<@42>",
+        name="joiner",
+    )
+
+    await client._snd_on_member_join(member)
+    await asyncio.sleep(0)
+
+    publisher.publish.assert_awaited_once()

@@ -5,8 +5,9 @@ from datetime import UTC, datetime, timedelta
 
 import discord
 
-from snd_revenue_service.embeds import render_join_embed, render_leave_embed
+from snd_revenue_service.embeds import render_join_embed, render_join_risk_embed, render_leave_embed
 from snd_revenue_service.events import build_join_event, build_leave_event
+from snd_revenue_service.join_profile import build_join_profile_snapshot
 
 AUDIT_MATCH_WINDOW = timedelta(seconds=30)
 AUDIT_LOOKUP_RETRY_DELAYS = (0.0, 0.75)
@@ -118,10 +119,13 @@ def create_client(
     settings,
     *,
     publisher,
+    join_risk_service=None,
     render_join=render_join_embed,
     render_leave=render_leave_embed,
+    render_join_risk=render_join_risk_embed,
     build_join=build_join_event,
     build_leave=build_leave_event,
+    profile_snapshot=build_join_profile_snapshot,
 ) -> discord.Client:
     intents = discord.Intents.none()
     intents.guilds = True
@@ -178,6 +182,30 @@ def create_client(
                 getattr(member, "id", "unknown"),
                 exc,
             )
+            return
+
+        if join_risk_service is not None:
+
+            async def _run_join_risk() -> None:
+                try:
+                    now = datetime.now(UTC)
+                    snapshot = profile_snapshot(member, now=now)
+                    result = await join_risk_service.assess(snapshot)
+                    risk_embed = render_join_risk(
+                        user_id=member.id,
+                        mention=getattr(member, "mention", None),
+                        username=getattr(member, "name", None),
+                        result=result,
+                    )
+                    await publisher.publish(risk_embed)
+                except Exception:
+                    logger.exception(
+                        "join risk assessment failed guild_id=%s user_id=%s",
+                        getattr(member.guild, "id", None),
+                        getattr(member, "id", None),
+                    )
+
+            asyncio.create_task(_run_join_risk())
 
     async def on_raw_member_remove(payload) -> None:
         if payload.guild_id != settings.guild_id:

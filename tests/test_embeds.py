@@ -7,8 +7,9 @@ import discord
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from snd_revenue_service.embeds import render_join_embed, render_leave_embed
+from snd_revenue_service.embeds import render_join_embed, render_join_risk_embed, render_leave_embed
 from snd_revenue_service.events import JoinAuditEvent, LeaveAuditEvent
+from snd_revenue_service.join_risk import JoinRiskResult, RISK_DISCLAIMER
 
 
 def _field_snapshot(embed) -> list[tuple[str, str, bool]]:
@@ -125,6 +126,30 @@ def test_render_leave_embed_renders_kick_specific_fields() -> None:
         ("Kick Reason", "spamming", False),
         ("Left At", _formatted_timestamp(event.left_at), True),
     ]
+
+
+def test_render_join_risk_embed_renders_assessment_fields() -> None:
+    result = JoinRiskResult(
+        risk_score=72,
+        category="likely_automation_or_compromise",
+        rationale="Very new account with no profile signals.",
+        signals=["account_age_days below 7", "default_avatar true"],
+    )
+    embed = render_join_risk_embed(
+        user_id=42,
+        mention="<@42>",
+        username="joiner",
+        result=result,
+    )
+
+    assert embed.title == "Join risk assessment"
+    assert embed.footer.text == RISK_DISCLAIMER
+    names = [f.name for f in embed.fields]
+    assert names == ["Member", "User ID", "Risk score", "Category", "Rationale", "Signals"]
+    member_field = next(f for f in embed.fields if f.name == "Member")
+    assert member_field.value == "<@42>"
+    score_field = next(f for f in embed.fields if f.name == "Risk score")
+    assert score_field.value == "72"
 
 
 def test_render_leave_embed_renders_ban_specific_fields() -> None:
