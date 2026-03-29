@@ -33,6 +33,7 @@ environment variable. Do not commit the config file or token.
 
 - `SND_REVENUE_CONFIG`: absolute or container-local path to the external TOML config file
 - `DISCORD_TOKEN`: Discord bot token from the Discord Developer Portal
+- `OPENAI_API_KEY`: optional; required when `[llm].enabled` is true (or `SND_LLM_ENABLED` overrides to on)
 
 Config file:
 
@@ -40,12 +41,26 @@ Config file:
 [discord]
 guild_id = 123456789012345678
 audit_channel_id = 987654321098765432
+
+# Optional: LLM join-risk follow-up embed (API key stays in env: OPENAI_API_KEY)
+[llm]
+enabled = false
+model = "5.4-mini"
+timeout_seconds = 30
+# base_url = "https://api.openai.com/v1"  # omit for OpenAI default; set for compatible APIs
 ```
 
 Settings:
 
 - `guild_id`: the single Discord server this bot should monitor
 - `audit_channel_id`: the channel where join and leave embeds should be posted
+
+Optional `[llm]` table:
+
+- `enabled`: when `true`, runs join-risk assessment if `OPENAI_API_KEY` is set
+- `model`, `timeout_seconds`, `base_url`: passed to the OpenAI-compatible client
+
+Environment overrides (when set): `SND_LLM_ENABLED`, `OPENAI_MODEL`, `OPENAI_BASE_URL`, `SND_LLM_TIMEOUT_SECONDS` override the matching TOML values.
 
 ## What The Bot Posts
 

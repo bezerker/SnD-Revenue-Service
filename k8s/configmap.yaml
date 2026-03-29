@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snd-revenue-service-config
+  namespace: snd-revenue
+data:
+  config.toml: |
+    [discord]
+    guild_id = 126568664773165056
+    audit_channel_id = 1482747395119780013
+
+    [llm]
+    enabled = true
+    model = "5.4-mini"
+    timeout_seconds = 30
+    # base_url = "https://api.openai.com/v1"

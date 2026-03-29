@@ -1,2 +1,3 @@
 docs/superpowers/
 .worktrees/
+k8s/secret.local.yaml

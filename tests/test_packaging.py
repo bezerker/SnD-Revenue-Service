@@ -32,7 +32,7 @@ def test_dockerignore_excludes_generated_python_artifacts() -> None:
 
 def test_sdist_does_not_include_worktree_git_metadata(tmp_path: Path) -> None:
     subprocess.run(
-        ["uv", "build", "--sdist", "--out-dir", str(tmp_path), "--clear"],
+        ["uv", "build", "--sdist", "--out-dir", str(tmp_path)],
         check=True,
         capture_output=True,
         text=True,

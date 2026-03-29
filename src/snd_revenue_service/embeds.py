@@ -1,6 +1,48 @@
 import discord
 
 from snd_revenue_service.events import JoinAuditEvent, LeaveAuditEvent
+from snd_revenue_service.join_risk import JoinRiskResult, RISK_DISCLAIMER
+
+_CATEGORY_LABELS = {
+    "likely_human": "Likely human",
+    "uncertain": "Uncertain",
+    "likely_automation_or_compromise": "Likely automation or compromise",
+}
+
+
+def _truncate_field_value(text: str, max_len: int = 1000) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def render_join_risk_embed(
+    *,
+    user_id: int,
+    mention: str | None,
+    username: str | None,
+    result: JoinRiskResult,
+) -> discord.Embed:
+    embed = discord.Embed(title="Join risk assessment")
+    member_value = mention or username or str(user_id)
+    embed.add_field(name="Member", value=member_value, inline=False)
+    embed.add_field(name="User ID", value=str(user_id), inline=True)
+    embed.add_field(name="Risk score", value=str(result.risk_score), inline=True)
+    category_label = _CATEGORY_LABELS.get(result.category, result.category)
+    embed.add_field(name="Category", value=category_label, inline=True)
+    embed.add_field(
+        name="Rationale",
+        value=_truncate_field_value(result.rationale),
+        inline=False,
+    )
+    signals_text = "\n".join(f"• {s}" for s in result.signals) if result.signals else "—"
+    embed.add_field(
+        name="Signals",
+        value=_truncate_field_value(signals_text),
+        inline=False,
+    )
+    embed.set_footer(text=RISK_DISCLAIMER)
+    return embed
 
 
 def render_join_embed(event: JoinAuditEvent) -> discord.Embed:
