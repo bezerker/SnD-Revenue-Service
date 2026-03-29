@@ -11,6 +11,6 @@ data:
 
     [llm]
     enabled = true
-    model = "5.4-mini"
+    model = "gpt-5.4-mini"
     timeout_seconds = 30
     # base_url = "https://api.openai.com/v1"
